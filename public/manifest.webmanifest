@@ -1,0 +1,19 @@
+{
+  "name": "Nurturee — Trusted Care for Your Loved Ones",
+  "short_name": "Nurturee",
+  "description": "Verified child care, elder care, doctor consultation & caregiver verification services in Gurgaon.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "categories": ["health", "medical", "lifestyle"],
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
