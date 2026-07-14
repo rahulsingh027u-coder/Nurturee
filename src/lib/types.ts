@@ -128,4 +128,13 @@ export type AppView =
   | "verification"
   | "bookings"
   | "documents"
-  | "caregiver-profile";
+  | "caregiver-profile"
+  | "doctor-console";
+
+export type VideoCallStatus =
+  | "idle" // no active call
+  | "ringing" // doctor started call, customer being notified
+  | "connecting" // offer/answer exchange in progress
+  | "connected" // peer connection established, video flowing
+  | "ended"
+  | "failed";

@@ -2,8 +2,9 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { AppView, Booking, CustomerDocument, Service } from "./types";
+import type { AppView, Booking, CustomerDocument, Service, VideoCallStatus } from "./types";
 import { CAREGIVERS } from "./data";
+import { VideoCallManager } from "./videoCall";
 
 interface BookingDraftAddress {
   fullName: string;
@@ -22,6 +23,24 @@ interface BookingDraft {
   timeSlot: string | null;
   address: BookingDraftAddress | null;
   notes: string;
+}
+
+/** Per-booking slot lock + incoming-call state (not persisted — runtime only). */
+interface SlotState {
+  /** True when the doctor has locked this slot — customer sees a "join now" badge. */
+  locked: boolean;
+  /** True when an incoming video call is ringing for this booking. */
+  ringing: boolean;
+  /** Remote peer (doctor) id for the active/incoming call. */
+  remotePeerId?: string;
+  /** Offer SDP for an incoming call (held until customer accepts). */
+  pendingOffer?: RTCSessionDescriptionInit;
+}
+
+interface IncomingCallInfo {
+  bookingId: string;
+  fromPeerId: string;
+  sdp: RTCSessionDescriptionInit;
 }
 
 interface AppState {
@@ -56,6 +75,35 @@ interface AppState {
   documents: CustomerDocument[];
   addDocument: (doc: CustomerDocument) => void;
   deleteDocument: (id: string) => void;
+
+  // ============ Video Call ============
+  /** Singleton VideoCallManager instance (created lazily on client). */
+  vcm: VideoCallManager | null;
+  /** Initialise the VCM + signal listeners (call once on app mount). */
+  initVideoCall: () => void;
+  /** Per-booking slot/call state, keyed by bookingId. */
+  slotStates: Record<string, SlotState>;
+  /** Currently active call's bookingId (when call panel is open). */
+  activeCallBookingId: string | null;
+  /** Current call status (separate from per-booking ringing). */
+  callStatus: VideoCallStatus;
+  /** Incoming call info when ringing. */
+  incomingCall: IncomingCallInfo | null;
+  /** Local + remote media streams (held here so UI can bind). */
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
+  /** Customer actions */
+  acceptIncomingCall: () => Promise<void>;
+  rejectIncomingCall: () => void;
+  endActiveCall: () => void;
+  /** Doctor (caller) actions */
+  doctorLockSlot: (bookingId: string) => void;
+  doctorUnlockSlot: (bookingId: string) => void;
+  doctorStartCall: (bookingId: string, remotePeerId: string) => Promise<void>;
+  /** Internal — set by signal listener */
+  _setSlotState: (bookingId: string, patch: Partial<SlotState>) => void;
+  _setCallStatus: (status: VideoCallStatus) => void;
+  _setStreams: (local?: MediaStream | null, remote?: MediaStream | null) => void;
 
   // Toast helper (simple bridge — uses window event)
   toast: (msg: string, type?: "default" | "success" | "error") => void;
@@ -188,6 +236,235 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ documents: [doc, ...s.documents] })),
       deleteDocument: (id) =>
         set((s) => ({ documents: s.documents.filter((d) => d.id !== id) })),
+
+      // ============ Video Call ============
+      vcm: null,
+      slotStates: {},
+      activeCallBookingId: null,
+      callStatus: "idle",
+      incomingCall: null,
+      localStream: null,
+      remoteStream: null,
+
+      initVideoCall: () => {
+        if (typeof window === "undefined") return;
+        const existing = get().vcm;
+        if (existing) return; // already initialised
+
+        const vcm = new VideoCallManager({
+          onLocalStream: (stream) => get()._setStreams(stream, undefined),
+          onRemoteStream: (stream) => get()._setStreams(undefined, stream),
+          onStatusChange: (status) => get()._setCallStatus(status),
+        });
+        vcm.start();
+
+        // Listen for signaling events from BroadcastChannel
+        const handler = (e: Event) => {
+          const detail = (e as CustomEvent).detail as {
+            kind: string;
+            bookingId: string;
+            from?: string;
+            sdp?: RTCSessionDescriptionInit;
+          };
+
+          switch (detail.kind) {
+            case "lock-slot": {
+              get()._setSlotState(detail.bookingId, { locked: true });
+              // Only toast if customer is not the one who locked it (different tab)
+              if (detail.from !== vcm.peerId) {
+                get().toast(
+                  "Your time slot has been locked by the doctor. Tap Join Video Call when ready.",
+                  "success"
+                );
+                // Play a soft beep via Web Audio
+                try {
+                  const ctx = new (window.AudioContext ||
+                    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+                  const osc = ctx.createOscillator();
+                  const gain = ctx.createGain();
+                  osc.frequency.value = 880;
+                  gain.gain.value = 0.1;
+                  osc.connect(gain);
+                  gain.connect(ctx.destination);
+                  osc.start();
+                  osc.stop(ctx.currentTime + 0.15);
+                  osc.onended = () => ctx.close();
+                } catch {
+                  // ignore
+                }
+              }
+              break;
+            }
+            case "unlock-slot": {
+              get()._setSlotState(detail.bookingId, { locked: false });
+              break;
+            }
+            case "incoming-call": {
+              // Customer receives an incoming call
+              get()._setSlotState(detail.bookingId, {
+                ringing: true,
+                remotePeerId: detail.from,
+                pendingOffer: detail.sdp,
+              });
+              set({
+                incomingCall: {
+                  bookingId: detail.bookingId,
+                  fromPeerId: detail.from!,
+                  sdp: detail.sdp!,
+                },
+                callStatus: "ringing",
+              });
+              get().toast(
+                "Incoming video call from your doctor — tap Join to answer.",
+                "default"
+              );
+              break;
+            }
+            case "call-ended": {
+              get()._setSlotState(detail.bookingId, {
+                ringing: false,
+                pendingOffer: undefined,
+              });
+              set({
+                activeCallBookingId: null,
+                callStatus: "idle",
+                incomingCall: null,
+                localStream: null,
+                remoteStream: null,
+              });
+              get().toast("Video call ended.", "default");
+              break;
+            }
+            case "call-rejected": {
+              set({
+                activeCallBookingId: null,
+                callStatus: "idle",
+              });
+              get().toast("Call was rejected.", "default");
+              break;
+            }
+          }
+        };
+        window.addEventListener("nurturee-signal", handler);
+
+        // Store vcm + handler reference for cleanup (we never actually clean up
+        // in this demo — it lives for the page lifetime)
+        set({ vcm });
+      },
+
+      _setSlotState: (bookingId, patch) =>
+        set((s) => ({
+          slotStates: {
+            ...s.slotStates,
+            [bookingId]: { locked: false, ringing: false, ...s.slotStates[bookingId], ...patch },
+          },
+        })),
+
+      _setCallStatus: (status) => set({ callStatus: status }),
+
+      _setStreams: (local, remote) =>
+        set((s) => ({
+          localStream: local !== undefined ? local : s.localStream,
+          remoteStream: remote !== undefined ? remote : s.remoteStream,
+        })),
+
+      // ===== Doctor actions =====
+      doctorLockSlot: (bookingId) => {
+        const vcm = get().vcm;
+        if (!vcm) return;
+        // Broadcast lock via signaling channel
+        const bc = new BroadcastChannel("nurturee-video");
+        bc.postMessage({ kind: "lock-slot", bookingId, from: vcm.peerId });
+        bc.close();
+        get()._setSlotState(bookingId, { locked: true });
+        get().toast("Slot locked. Customer has been notified.", "success");
+      },
+
+      doctorUnlockSlot: (bookingId) => {
+        const vcm = get().vcm;
+        if (!vcm) return;
+        const bc = new BroadcastChannel("nurturee-video");
+        bc.postMessage({ kind: "unlock-slot", bookingId, from: vcm.peerId });
+        bc.close();
+        get()._setSlotState(bookingId, { locked: false });
+      },
+
+      doctorStartCall: async (bookingId, remotePeerId) => {
+        const vcm = get().vcm;
+        if (!vcm) {
+          get().toast("Video call not initialised.", "error");
+          return;
+        }
+        set({ activeCallBookingId: bookingId });
+        try {
+          await vcm.startCall(bookingId, remotePeerId);
+        } catch (err) {
+          console.error("doctorStartCall failed:", err);
+          get().toast(
+            "Could not access camera/microphone. Please grant permission.",
+            "error"
+          );
+          set({ activeCallBookingId: null });
+        }
+      },
+
+      // ===== Customer actions =====
+      acceptIncomingCall: async () => {
+        const { incomingCall, vcm } = get();
+        if (!incomingCall || !vcm) return;
+        set({
+          activeCallBookingId: incomingCall.bookingId,
+          callStatus: "connecting",
+        });
+        try {
+          await vcm.acceptCall(
+            incomingCall.bookingId,
+            incomingCall.fromPeerId,
+            incomingCall.sdp
+          );
+          // Clear ringing state
+          get()._setSlotState(incomingCall.bookingId, {
+            ringing: false,
+            pendingOffer: undefined,
+          });
+          set({ incomingCall: null });
+        } catch (err) {
+          console.error("acceptIncomingCall failed:", err);
+          get().toast(
+            "Could not access camera/microphone. Please grant permission.",
+            "error"
+          );
+          set({
+            activeCallBookingId: null,
+            callStatus: "idle",
+            incomingCall: null,
+          });
+        }
+      },
+
+      rejectIncomingCall: () => {
+        const { incomingCall, vcm } = get();
+        if (!incomingCall || !vcm) return;
+        vcm.rejectCall(incomingCall.bookingId, incomingCall.fromPeerId);
+        get()._setSlotState(incomingCall.bookingId, {
+          ringing: false,
+          pendingOffer: undefined,
+        });
+        set({ incomingCall: null, callStatus: "idle" });
+        get().toast("Call rejected.", "default");
+      },
+
+      endActiveCall: () => {
+        const { vcm } = get();
+        if (vcm) vcm.endCall();
+        set({
+          activeCallBookingId: null,
+          callStatus: "idle",
+          incomingCall: null,
+          localStream: null,
+          remoteStream: null,
+        });
+      },
 
       toast: (msg, type = "default") => {
         if (typeof window === "undefined") return;

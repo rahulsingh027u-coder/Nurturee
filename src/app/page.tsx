@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useAppStore } from "@/lib/store";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
@@ -11,10 +12,32 @@ import { ServiceDetailView } from "@/components/site/ServiceDetailView";
 import { CaregiverProfileView } from "@/components/site/CaregiverProfileView";
 import { MyBookingsView } from "@/components/site/MyBookingsView";
 import { MyDocumentsView } from "@/components/site/MyDocumentsView";
+import { DoctorConsoleView } from "@/components/site/DoctorConsoleView";
+import { VideoCallView } from "@/components/site/VideoCallView";
 
 export default function Home() {
   const view = useAppStore((s) => s.view);
+  const setView = useAppStore((s) => s.setView);
   const bookingSessionId = useAppStore((s) => s.bookingSessionId);
+  const initVideoCall = useAppStore((s) => s.initVideoCall);
+
+  // Initialise the WebRTC + BroadcastChannel manager once on mount
+  useEffect(() => {
+    initVideoCall();
+  }, [initVideoCall]);
+
+  // Hash routing — `#doctor` opens the doctor console
+  useEffect(() => {
+    const applyHash = () => {
+      const hash = window.location.hash.toLowerCase();
+      if (hash === "#doctor" || hash === "#doctor-portal") {
+        setView("doctor-console");
+      }
+    };
+    applyHash();
+    window.addEventListener("hashchange", applyHash);
+    return () => window.removeEventListener("hashchange", applyHash);
+  }, [setView]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -32,11 +55,15 @@ export default function Home() {
         {view === "bookings" && <MyBookingsView />}
         {view === "documents" && <MyDocumentsView />}
         {view === "caregiver-profile" && <CaregiverProfileView />}
+        {view === "doctor-console" && <DoctorConsoleView />}
       </main>
 
       <Footer />
       <BottomNav />
       <BookingModal key={bookingSessionId} />
+
+      {/* Full-screen video call overlay — renders above everything when active */}
+      <VideoCallView />
     </div>
   );
 }
