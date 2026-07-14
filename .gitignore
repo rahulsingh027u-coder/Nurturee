@@ -52,3 +52,16 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Build artifacts & downloads (kept locally, not in git)
+/download/
+/research/
+/tool-results/
+/upload/
+
+# Database
+db/*.db
+db/*.db-journal
+
+# Z.ai scripts
+/.zscripts/
