@@ -15,7 +15,7 @@ import {
   Radio,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { CAREGIVERS } from "@/lib/data";
+import { CAREGIVERS, DOCTORS } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
@@ -148,6 +148,7 @@ export function MyBookingsView() {
           <div className="mt-6 space-y-3">
             {bookings.map((b) => {
               const caregiver = CAREGIVERS.find((c) => c.id === b.caregiverId);
+              const doctor = DOCTORS.find((d) => d.id === b.doctorId);
               const status = STATUS_LABEL[b.status];
               const slot = slotStates[b.id] ?? { locked: false, ringing: false };
               const isIncoming = incomingCall?.bookingId === b.id;
@@ -231,7 +232,34 @@ export function MyBookingsView() {
                     </p>
                   )}
 
-                  {/* Assigned caregiver mini-card */}
+                  {/* Assigned doctor mini-card (for doctor bookings) */}
+                  {doctor && b.status === "caregiver-assigned" && (
+                    <div className="mt-3 flex items-center gap-3 rounded-lg border border-rose-200 bg-rose-50/50 p-3">
+                      <div
+                        className={`flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${doctor.photoColor} text-xs font-bold text-white`}
+                      >
+                        {doctor.name
+                          .replace("Dr. ", "")
+                          .split(" ")
+                          .map((n) => n[0])
+                          .slice(0, 2)
+                          .join("")}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-rose-900">
+                          Selected doctor
+                        </p>
+                        <p className="text-sm font-semibold text-rose-900">
+                          {doctor.name} • {doctor.specialization}
+                        </p>
+                        <p className="text-[11px] text-rose-700">
+                          {doctor.area} • {doctor.experienceYears} yrs exp • ⭐ {doctor.rating}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Assigned caregiver mini-card (for non-doctor bookings) */}
                   {caregiver && b.status === "caregiver-assigned" && (
                     <div className="mt-3 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
                       <div

@@ -1,10 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { ArrowLeft, Check, Clock, MapPin, Video, Wallet } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { SERVICES } from "@/lib/data";
+import { SERVICES, DOCTORS } from "@/lib/data";
 import { Icon, ACCENT_CLASSES } from "./Icons";
-import type { Service, ServiceCategory } from "@/lib/types";
+import { DoctorSelectionModal } from "./DoctorSelectionModal";
+import type { Doctor, Service, ServiceCategory } from "@/lib/types";
+
+/** Returns true if any doctor in the network can provide this service. */
+function hasDoctors(service: Service): boolean {
+  return DOCTORS.some((d) => d.serviceIds.includes(service.id));
+}
 
 const CATEGORY_TITLE: Record<ServiceCategory, { title: string; subtitle: string }> = {
   childcare: {
@@ -43,9 +50,27 @@ function formatPrice(s: Service): string {
   return `₹${s.price.toLocaleString("en-IN")} ${s.priceUnit}`;
 }
 
-function ServiceCard({ service }: { service: Service }) {
+function ServiceCard({
+  service,
+  onSelectDoctor,
+}: {
+  service: Service;
+  onSelectDoctor: (service: Service) => void;
+}) {
   const openBooking = useAppStore((s) => s.openBooking);
   const accent = ACCENT_CLASSES[service.accent];
+
+  const handleBookNow = () => {
+    // If this service has doctors in the network, show the doctor selection
+    // modal first. The customer picks a specific doctor, THEN the calendar/
+    // time booking opens. Otherwise (nannies, elder caregivers, verification),
+    // open the booking modal directly.
+    if (hasDoctors(service)) {
+      onSelectDoctor(service);
+    } else {
+      openBooking(service);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/60 bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md md:p-6">
@@ -99,10 +124,10 @@ function ServiceCard({ service }: { service: Service }) {
       </ul>
 
       <button
-        onClick={() => openBooking(service)}
+        onClick={handleBookNow}
         className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 px-5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md active:scale-95"
       >
-        Book Now
+        {hasDoctors(service) ? "Select Doctor & Book" : "Book Now"}
       </button>
     </div>
   );
@@ -110,9 +135,24 @@ function ServiceCard({ service }: { service: Service }) {
 
 export function ServiceDetailView({ category }: { category: ServiceCategory }) {
   const setView = useAppStore((s) => s.setView);
+  const openBooking = useAppStore((s) => s.openBooking);
+  const setDraftDoctor = useAppStore((s) => s.setDraftDoctor);
   const meta = CATEGORY_TITLE[category];
   const accent = ACCENT_CLASSES[CATEGORY_ACCENT[category]];
   const services = SERVICES.filter((s) => s.category === category);
+  const [doctorSelectService, setDoctorSelectService] = useState<Service | null>(
+    null
+  );
+
+  // When a doctor is selected from the list, open the booking modal FIRST,
+  // then set the doctor in the draft. (openBooking resets the draft, so we
+  // must set the doctor after it runs.)
+  const handleDoctorSelected = (doc: Doctor) => {
+    if (!doctorSelectService) return;
+    openBooking(doctorSelectService);
+    setDraftDoctor(doc);
+    setDoctorSelectService(null);
+  };
 
   // Special ordering for childcare: maternal services first, nannies after
   if (category === "childcare") {
@@ -170,7 +210,7 @@ export function ServiceDetailView({ category }: { category: ServiceCategory }) {
             </p>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {maternal.map((s) => (
-                <ServiceCard key={s.id} service={s} />
+                <ServiceCard key={s.id} service={s} onSelectDoctor={setDoctorSelectService} />
               ))}
             </div>
           </section>
@@ -186,10 +226,19 @@ export function ServiceDetailView({ category }: { category: ServiceCategory }) {
             </p>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {nannies.map((s) => (
-                <ServiceCard key={s.id} service={s} />
+                <ServiceCard key={s.id} service={s} onSelectDoctor={setDoctorSelectService} />
               ))}
             </div>
           </section>
+
+          {/* Doctor selection modal — shown when a maternal health service is booked */}
+          {doctorSelectService && (
+            <DoctorSelectionModal
+              service={doctorSelectService}
+              onClose={() => setDoctorSelectService(null)}
+              onSelect={handleDoctorSelected}
+            />
+          )}
         </div>
       </div>
     );
@@ -231,10 +280,19 @@ export function ServiceDetailView({ category }: { category: ServiceCategory }) {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {services.map((s) => (
-            <ServiceCard key={s.id} service={s} />
+            <ServiceCard key={s.id} service={s} onSelectDoctor={setDoctorSelectService} />
           ))}
         </div>
       </div>
+
+      {/* Doctor selection modal — only shown for doctor-category services */}
+      {doctorSelectService && (
+        <DoctorSelectionModal
+          service={doctorSelectService}
+          onClose={() => setDoctorSelectService(null)}
+          onSelect={handleDoctorSelected}
+        />
+      )}
     </div>
   );
 }

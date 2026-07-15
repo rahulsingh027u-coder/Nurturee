@@ -2,8 +2,8 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { AppView, Booking, CustomerDocument, Service, VideoCallStatus } from "./types";
-import { CAREGIVERS } from "./data";
+import type { AppView, Booking, CustomerDocument, Doctor, Service, VideoCallStatus } from "./types";
+import { CAREGIVERS, DOCTORS } from "./data";
 import { VideoCallManager } from "./videoCall";
 
 interface BookingDraftAddress {
@@ -23,6 +23,8 @@ interface BookingDraft {
   timeSlot: string | null;
   address: BookingDraftAddress | null;
   notes: string;
+  /** For doctor bookings — the selected doctor */
+  doctor: Doctor | null;
 }
 
 /** Per-booking slot lock + incoming-call state (not persisted — runtime only). */
@@ -60,6 +62,7 @@ interface AppState {
   setDraftTime: (t: string) => void;
   setDraftAddress: (a: BookingDraftAddress) => void;
   setDraftNotes: (n: string) => void;
+  setDraftDoctor: (d: Doctor | null) => void;
   resetDraft: () => void;
   confirmBooking: () => string | null; // returns booking id or null
 
@@ -116,6 +119,7 @@ const emptyDraft: BookingDraft = {
   timeSlot: null,
   address: null,
   notes: "",
+  doctor: null,
 };
 
 export const useAppStore = create<AppState>()(
@@ -156,6 +160,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ bookingDraft: { ...s.bookingDraft, address: a } })),
       setDraftNotes: (n) =>
         set((s) => ({ bookingDraft: { ...s.bookingDraft, notes: n } })),
+      setDraftDoctor: (d) =>
+        set((s) => ({ bookingDraft: { ...s.bookingDraft, doctor: d } })),
       resetDraft: () => set({ bookingDraft: emptyDraft }),
 
       confirmBooking: () => {
@@ -164,11 +170,39 @@ export const useAppStore = create<AppState>()(
           return null;
         if (draft.mode === "physical" && !draft.address) return null;
 
-        // Simulate admin assigning an approved caregiver based on category
+        // For doctor bookings, the customer has already chosen a doctor.
+        // We don't assign a separate caregiver — the doctor IS the service provider.
+        if (draft.service.category === "doctor" && draft.doctor) {
+          const doc = draft.doctor;
+          const id = `BK-${Date.now().toString(36).toUpperCase()}`;
+          const newBooking: Booking = {
+            id,
+            serviceId: draft.service.id,
+            serviceName: draft.service.name,
+            category: draft.service.category,
+            mode: draft.mode,
+            date: draft.date,
+            timeSlot: draft.timeSlot,
+            address: draft.mode === "physical" ? draft.address! : undefined,
+            notes: draft.notes || undefined,
+            price:
+              draft.mode === "online"
+                ? doc.onlineFee
+                : doc.inHomeFee,
+            status: "caregiver-assigned",
+            doctorId: doc.id,
+            createdAt: new Date().toISOString(),
+          };
+          set((s) => ({
+            bookings: [newBooking, ...s.bookings],
+            isBookingOpen: false,
+            bookingDraft: emptyDraft,
+          }));
+          return id;
+        }
+
+        // Non-doctor bookings — simulate admin assigning an approved caregiver
         const candidates = CAREGIVERS.filter((c) => {
-          if (draft.service!.category === "doctor") {
-            return c.id.startsWith("cg-006") || c.specialization.toLowerCase().includes("gynae");
-          }
           if (draft.service!.category === "eldercare") {
             return (
               c.specialization.toLowerCase().includes("elder") ||

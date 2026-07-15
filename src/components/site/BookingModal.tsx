@@ -187,12 +187,20 @@ export function BookingModal() {
         <DialogHeader className="border-b border-border/60 px-5 py-4 text-left">
           <DialogTitle className="text-base font-bold sm:text-lg">
             Book: {service.name}
+            {bookingDraft.doctor && (
+              <span className="block text-xs font-medium text-rose-600 sm:inline sm:ml-2">
+                with {bookingDraft.doctor.name}
+              </span>
+            )}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground sm:text-sm">
-            {service.duration} •{" "}
-            {service.mode === "both"
-              ? `₹${service.onlinePrice?.toLocaleString("en-IN")} online / ₹${service.inHomePrice?.toLocaleString("en-IN")} at-home`
-              : `₹${service.price.toLocaleString("en-IN")} ${service.priceUnit}`}
+            {bookingDraft.doctor
+              ? `${bookingDraft.doctor.specialization} • ${bookingDraft.doctor.experienceYears} yrs exp • ${bookingDraft.doctor.area}`
+              : `${service.duration} • ${
+                  service.mode === "both"
+                    ? `₹${service.onlinePrice?.toLocaleString("en-IN")} online / ₹${service.inHomePrice?.toLocaleString("en-IN")} at-home`
+                    : `₹${service.price.toLocaleString("en-IN")} ${service.priceUnit}`
+                }`}
           </DialogDescription>
 
           {/* Step indicator */}
@@ -440,6 +448,17 @@ export function BookingModal() {
                     <dt className="text-muted-foreground">Service</dt>
                     <dd className="font-medium text-right">{service.name}</dd>
                   </div>
+                  {bookingDraft.doctor && (
+                    <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                      <dt className="text-muted-foreground">Doctor</dt>
+                      <dd className="text-right">
+                        <span className="font-medium">{bookingDraft.doctor.name}</span>
+                        <span className="block text-[11px] text-slate-500">
+                          {bookingDraft.doctor.specialization} • {bookingDraft.doctor.area}
+                        </span>
+                      </dd>
+                    </div>
+                  )}
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Mode</dt>
                     <dd className="font-medium capitalize">
@@ -473,7 +492,11 @@ export function BookingModal() {
                     <dd className="font-bold text-blue-700">
                       ₹
                       {(
-                        bookingDraft.mode === "online"
+                        bookingDraft.doctor
+                          ? bookingDraft.mode === "online"
+                            ? bookingDraft.doctor.onlineFee
+                            : bookingDraft.doctor.inHomeFee
+                          : bookingDraft.mode === "online"
                           ? service.onlinePrice ?? service.price
                           : service.inHomePrice ?? service.price
                       ).toLocaleString("en-IN")}

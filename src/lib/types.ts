@@ -104,7 +104,45 @@ export interface Booking {
     | "completed"
     | "cancelled";
   caregiverId?: string;
+  /** For doctor bookings — the selected doctor's id */
+  doctorId?: string;
   createdAt: string;
+}
+
+/**
+ * A doctor in the Nurturee network. Each doctor belongs to one or more
+ * service categories (matched via `serviceIds`) so the customer can pick
+ * a specific doctor when booking a consultation.
+ */
+export interface Doctor {
+  id: string;
+  name: string;
+  /** Medical qualifications, e.g. "MBBS, MS (OBG)" */
+  qualifications: string;
+  /** Specialization label shown on the card */
+  specialization: string;
+  /** Service IDs this doctor can be booked for (links to Service.id) */
+  serviceIds: string[];
+  /** Years of clinical experience */
+  experienceYears: number;
+  /** Gurgaon sector / area where the doctor's clinic is */
+  area: string;
+  /** Full clinic address */
+  clinicAddress: string;
+  /** Languages spoken */
+  languages: string[];
+  /** Online consult fee in INR */
+  onlineFee: number;
+  /** In-home visit fee in INR */
+  inHomeFee: number;
+  /** Next available slot label, e.g. "Today, 4:00 PM" */
+  nextAvailable: string;
+  /** Gradient classes for the avatar */
+  photoColor: string;
+  /** Rating out of 5 (mock for demo) */
+  rating: number;
+  /** Number of consultations done (mock for demo) */
+  consultations: number;
 }
 
 export interface CustomerDocument {
