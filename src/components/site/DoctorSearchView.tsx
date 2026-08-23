@@ -108,7 +108,6 @@ export function DoctorSearchView() {
   );
   const [locating, setLocating] = useState(false);
   const [detectedArea, setDetectedArea] = useState<string | null>(null);
-  const [showLocationPrompt, setShowLocationPrompt] = useState(false);
 
   /** Reverse-geocode the user's GPS coordinates using the free OpenStreetMap
    *  Nominatim API. Returns the matched Gurgaon sector if found, else null. */
@@ -151,11 +150,14 @@ export function DoctorSearchView() {
   /** Use the browser's Geolocation API to fetch the user's precise location,
    *  reverse-geocode it to get the actual sector name, and apply it as the
    *  area filter. Falls back to Haversine nearest-sector if geocoding fails. */
-  // Auto-show location prompt on first visit
+  // Auto-fetch location on first visit
   useEffect(() => {
-    const dismissed = sessionStorage.getItem("doc-location-prompt-dismissed");
-    if (!dismissed) {
-      const timer = setTimeout(() => setShowLocationPrompt(true), 800);
+    const done = sessionStorage.getItem("doc-location-done");
+    if (!done) {
+      const timer = setTimeout(() => {
+        handleUseMyLocation();
+        sessionStorage.setItem("doc-location-done", "true");
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, []);
@@ -347,38 +349,6 @@ export function DoctorSearchView() {
         </div>
 
         {/* Filters row */}
-          {/* Location prompt banner */}
-          {showLocationPrompt && (
-            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-lg flex-shrink-0">📍</div>
-                <div>
-                  <p className="font-semibold text-gray-900">Find doctors near you</p>
-                  <p className="text-sm text-gray-500">Allow location access to show doctors in your area</p>
-                </div>
-              </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <button
-                  onClick={() => {
-                    setShowLocationPrompt(false);
-                    handleUseMyLocation();
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                >
-                  Detect Location
-                </button>
-                <button
-                  onClick={() => {
-                    setShowLocationPrompt(false);
-                    sessionStorage.setItem("doc-location-prompt-dismissed", "true");
-                  }}
-                  className="px-4 py-2 bg-white text-gray-600 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-                >
-                  Choose Manually
-                </button>
-              </div>
-            </div>
-          )}
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <Filter className="size-4 text-slate-500" />
