@@ -9,6 +9,7 @@ import { ToastHost } from "@/components/site/ToastHost";
 import { BookingModal } from "@/components/site/BookingModal";
 import { HomeView } from "@/components/site/HomeView";
 import { ServiceDetailView } from "@/components/site/ServiceDetailView";
+import { DoctorSearchView } from "@/components/site/DoctorSearchView";
 import { CaregiverProfileView } from "@/components/site/CaregiverProfileView";
 import { MyBookingsView } from "@/components/site/MyBookingsView";
 import { MyDocumentsView } from "@/components/site/MyDocumentsView";
@@ -21,12 +22,10 @@ export default function Home() {
   const bookingSessionId = useAppStore((s) => s.bookingSessionId);
   const initVideoCall = useAppStore((s) => s.initVideoCall);
 
-  // Initialise the WebRTC + BroadcastChannel manager once on mount
   useEffect(() => {
     initVideoCall();
   }, [initVideoCall]);
 
-  // Hash routing — `#doctor` opens the doctor console
   useEffect(() => {
     const applyHash = () => {
       const hash = window.location.hash.toLowerCase();
@@ -43,26 +42,20 @@ export default function Home() {
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
       <ToastHost />
-
       <main className="flex-1 pb-16 md:pb-0">
         {view === "home" && <HomeView />}
         {view === "childcare" && <ServiceDetailView category="childcare" />}
         {view === "eldercare" && <ServiceDetailView category="eldercare" />}
-        {view === "doctor" && <ServiceDetailView category="doctor" />}
-        {view === "verification" && (
-          <ServiceDetailView category="verification" />
-        )}
+        {view === "doctor" && <DoctorSearchView />}
+        {view === "verification" && <ServiceDetailView category="verification" />}
         {view === "bookings" && <MyBookingsView />}
         {view === "documents" && <MyDocumentsView />}
         {view === "caregiver-profile" && <CaregiverProfileView />}
         {view === "doctor-console" && <DoctorConsoleView />}
       </main>
-
       <Footer />
       <BottomNav />
       <BookingModal key={bookingSessionId} />
-
-      {/* Full-screen video call overlay — renders above everything when active */}
       <VideoCallView />
     </div>
   );

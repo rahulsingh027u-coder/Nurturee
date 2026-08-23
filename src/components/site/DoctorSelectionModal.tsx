@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Award,
   MapPin,
-  Star,
   Video,
   Clock,
   Check,
@@ -23,6 +22,8 @@ import { cn } from "@/lib/utils";
  * modal opens FIRST — showing a list of doctors who can provide that service.
  * The customer can filter by area (nearest first) and experience, then pick a
  * specific doctor before proceeding to the calendar/time-slot booking flow.
+ *
+ * All doctors are equal on the platform — no rank badges, no ratings.
  */
 export function DoctorSelectionModal({
   service,
@@ -35,9 +36,7 @@ export function DoctorSelectionModal({
 }) {
   const [areaFilter, setAreaFilter] = useState<string>("all");
   const [expFilter, setExpFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"area" | "experience" | "rating" | "fee">(
-    "area"
-  );
+  const [sortBy, setSortBy] = useState<"area" | "experience" | "fee">("area");
 
   // Doctors who can provide this specific service
   const eligibleDoctors = useMemo(
@@ -65,16 +64,12 @@ export function DoctorSelectionModal({
     const sorted = [...list];
     switch (sortBy) {
       case "area":
-        // Nearest first = alphabetical by sector number
         sorted.sort((a, b) =>
           a.area.localeCompare(b.area, undefined, { numeric: true })
         );
         break;
       case "experience":
         sorted.sort((a, b) => b.experienceYears - a.experienceYears);
-        break;
-      case "rating":
-        sorted.sort((a, b) => b.rating - a.rating);
         break;
       case "fee":
         sorted.sort((a, b) => a.onlineFee - b.onlineFee);
@@ -142,13 +137,12 @@ export function DoctorSelectionModal({
           <select
             value={sortBy}
             onChange={(e) =>
-              setSortBy(e.target.value as "area" | "experience" | "rating" | "fee")
+              setSortBy(e.target.value as "area" | "experience" | "fee")
             }
             className="h-8 rounded-lg border border-border bg-white px-2 text-xs font-medium"
           >
             <option value="area">Nearest area first</option>
             <option value="experience">Most experienced</option>
-            <option value="rating">Highest rated</option>
             <option value="fee">Lowest fee</option>
           </select>
           <span className="ml-auto text-xs text-slate-500">
@@ -178,11 +172,10 @@ export function DoctorSelectionModal({
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((doc, idx) => (
+              {filtered.map((doc) => (
                 <DoctorCard
                   key={doc.id}
                   doctor={doc}
-                  rank={idx + 1}
                   onSelect={() => onSelect(doc)}
                 />
               ))}
@@ -195,7 +188,8 @@ export function DoctorSelectionModal({
           <p className="text-[11px] leading-relaxed text-slate-500">
             💡 Doctors are sorted by nearest area first. All doctors are
             verified, video-interviewed and admin-approved. Online consults
-            happen over secure video; in-home visits are at your address.
+            happen over secure video; in-clinic visits are at the clinic
+            address shown.
           </p>
         </div>
       </div>
@@ -205,11 +199,9 @@ export function DoctorSelectionModal({
 
 function DoctorCard({
   doctor,
-  rank,
   onSelect,
 }: {
   doctor: Doctor;
-  rank: number;
   onSelect: () => void;
 }) {
   const initials = doctor.name
@@ -221,11 +213,8 @@ function DoctorCard({
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-white p-4 shadow-sm transition-all hover:border-rose-300 hover:shadow-md sm:flex-row sm:items-center">
-      {/* Rank + Avatar */}
+      {/* Avatar */}
       <div className="flex items-center gap-3 sm:flex-col sm:items-center">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-bold text-rose-700">
-          #{rank}
-        </span>
         <div
           className={cn(
             "flex size-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-lg font-bold text-white shadow-sm",
@@ -240,10 +229,6 @@ function DoctorCard({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-bold sm:text-base">{doctor.name}</h3>
-          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-            <Star className="size-2.5 fill-amber-500 text-amber-500" />
-            {doctor.rating}
-          </span>
           <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
             <Check className="size-2.5" /> Verified
           </span>
@@ -280,7 +265,7 @@ function DoctorCard({
             <Video className="size-3" /> ₹{doctor.onlineFee.toLocaleString("en-IN")} online
           </span>
           <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
-            <MapPin className="size-3" /> ₹{doctor.inHomeFee.toLocaleString("en-IN")} at-home
+            <MapPin className="size-3" /> ₹{doctor.inHomeFee.toLocaleString("en-IN")} at-clinic
           </span>
         </div>
       </div>
