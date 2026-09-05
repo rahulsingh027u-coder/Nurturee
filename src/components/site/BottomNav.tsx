@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarDays, FileText, Home, Stethoscope, Users } from "lucide-react";
+import Link from "next/link";
+import { CalendarDays, FileText, Home, LogIn, Stethoscope, Users } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import type { AppView } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -17,9 +18,7 @@ export function BottomNav() {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
 
-  // Hide bottom nav on caregiver profile view (full focus)
   if (view === "caregiver-profile" || view === "doctor" || view === "verification") {
-    // Still show on doctor & verification for easy nav
     if (view === "caregiver-profile") return null;
   }
 
@@ -52,6 +51,16 @@ export function BottomNav() {
             </button>
           );
         })}
+        <Link
+          href="/patient/login"
+          className="flex flex-1 flex-col items-center gap-0.5 py-2 text-slate-500 hover:text-blue-700 transition-colors"
+          aria-label="Login"
+        >
+          <div className="flex size-9 items-center justify-center rounded-full">
+            <LogIn className="size-5" />
+          </div>
+          <span className="text-[10px] font-medium">Login</span>
+        </Link>
       </div>
     </nav>
   );

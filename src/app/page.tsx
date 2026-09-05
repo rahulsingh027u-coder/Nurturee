@@ -15,6 +15,7 @@ import { MyBookingsView } from "@/components/site/MyBookingsView";
 import { MyDocumentsView } from "@/components/site/MyDocumentsView";
 import { DoctorConsoleView } from "@/components/site/DoctorConsoleView";
 import { VideoCallView } from "@/components/site/VideoCallView";
+import type { AppView } from "@/lib/types";
 
 export default function Home() {
   const view = useAppStore((s) => s.view);
@@ -27,16 +28,27 @@ export default function Home() {
   }, [initVideoCall]);
 
   useEffect(() => {
-    const applyHash = () => {
-      const hash = window.location.hash.toLowerCase();
-      if (hash === "#doctor" || hash === "#doctor-portal") {
-        setView("doctor-console");
-      }
+    const vfp = () => {
+      const p = window.location.pathname.replace(/\/+$/, "");
+      if (p === "" || p === "/") return "home";
+      const map: Record<string, string> = {
+        "/childcare": "childcare",
+        "/eldercare": "eldercare",
+        "/doctor": "doctor",
+        "/verification": "verification",
+        "/bookings": "bookings",
+        "/documents": "documents",
+        "/caregiver-profile": "caregiver-profile",
+        "/doctor-console": "doctor-console",
+      };
+      return map[p] || "home";
     };
-    applyHash();
-    window.addEventListener("hashchange", applyHash);
-    return () => window.removeEventListener("hashchange", applyHash);
-  }, [setView]);
+    const iv = vfp();
+    if (iv !== view) setView(iv as typeof view);
+    const onPop = () => useAppStore.setState({ view: vfp() as any });
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">

@@ -100,8 +100,8 @@ interface AppState {
   rejectIncomingCall: () => void;
   endActiveCall: () => void;
   /** Doctor (caller) actions */
-  doctorLockSlot: (bookingId: string) => void;
-  doctorUnlockSlot: (bookingId: string) => void;
+  doctorLockSlot: (bookingId: string, toPeerId?: string) => void;
+  doctorUnlockSlot: (bookingId: string, toPeerId?: string) => void;
   doctorStartCall: (bookingId: string, remotePeerId: string) => Promise<void>;
   /** Internal — set by signal listener */
   _setSlotState: (bookingId: string, patch: Partial<SlotState>) => void;
@@ -129,7 +129,9 @@ export const useAppStore = create<AppState>()(
       setView: (v) => {
         set({ view: v });
         if (typeof window !== "undefined") {
-          window.scrollTo({ top: 0, behavior: "auto" });
+          const path = v === "home" ? "/" : "/" + v;
+    window.history.pushState(null, "", path);
+    window.scrollTo({ top: 0, behavior: "auto" });
         }
       },
 
@@ -390,7 +392,10 @@ export const useAppStore = create<AppState>()(
         set((s) => ({
           slotStates: {
             ...s.slotStates,
-            [bookingId]: { locked: false, ringing: false, ...s.slotStates[bookingId], ...patch },
+            [bookingId]: {
+              ...(s.slotStates[bookingId] ?? { locked: false, ringing: false }),
+              ...patch,
+            },
           },
         })),
 
@@ -403,23 +408,18 @@ export const useAppStore = create<AppState>()(
         })),
 
       // ===== Doctor actions =====
-      doctorLockSlot: (bookingId) => {
+      doctorLockSlot: (bookingId, toPeerId) => {
         const vcm = get().vcm;
-        if (!vcm) return;
-        // Broadcast lock via signaling channel
-        const bc = new BroadcastChannel("nurturee-video");
-        bc.postMessage({ kind: "lock-slot", bookingId, from: vcm.peerId });
-        bc.close();
+        if (!vcm || !toPeerId) return;
+        vcm.lockSlot(bookingId, toPeerId);
         get()._setSlotState(bookingId, { locked: true });
         get().toast("Slot locked. Customer has been notified.", "success");
       },
 
-      doctorUnlockSlot: (bookingId) => {
+      doctorUnlockSlot: (bookingId, toPeerId) => {
         const vcm = get().vcm;
-        if (!vcm) return;
-        const bc = new BroadcastChannel("nurturee-video");
-        bc.postMessage({ kind: "unlock-slot", bookingId, from: vcm.peerId });
-        bc.close();
+        if (!vcm || !toPeerId) return;
+        vcm.unlockSlot(bookingId, toPeerId);
         get()._setSlotState(bookingId, { locked: false });
       },
 
@@ -524,6 +524,8 @@ export const useAppStore = create<AppState>()(
       partialize: (s) => ({
         bookings: s.bookings,
         documents: s.documents,
+        bookingDraft: s.bookingDraft,
+        isBookingOpen: s.isBookingOpen,
       }),
     }
   )

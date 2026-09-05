@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { addDays, format, isBefore, startOfDay } from "date-fns";
 import {
   ArrowLeft,
@@ -13,7 +13,6 @@ import {
   Video,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { TIME_SLOTS } from "@/lib/data";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
@@ -32,7 +31,6 @@ type Step = "mode" | "schedule" | "address" | "review";
 export function BookingModal() {
   const {
     isBookingOpen,
-    bookingDraft,
     closeBooking,
     setDraftMode,
     setDraftDate,
@@ -43,6 +41,7 @@ export function BookingModal() {
     setView,
     toast,
   } = useAppStore();
+  const bookingDraft = useAppStore((s) => s.bookingDraft);
 
   const service = bookingDraft.service;
   // Lazy initial state — the modal is remounted via React `key` (bookingSessionId)
@@ -54,6 +53,16 @@ export function BookingModal() {
   const [confirmedBookingId, setConfirmedBookingId] = useState<string | null>(
     null
   );
+  const [slots,setSlots]=useState<string[]>([])
+  const [slotsLoading,setSlotsLoading]=useState(false)
+  const docId=bookingDraft.doctor?.id
+  useEffect(()=>{
+    if(!bookingDraft.date||!docId){setSlots([]);return}
+    setSlotsLoading(true)
+    fetch(`/patient/api/doctors/${docId}/slots?date=${bookingDraft.date}`)
+      .then(r=>{return r.ok?r.json():{slots:[]}}).then(d=>{setSlots(d.slots||[])})
+      .catch(()=>setSlots([])).finally(()=>setSlotsLoading(false))
+  },[bookingDraft.date,docId])
 
   // Address form state
   const [addr, setAddr] = useState({
@@ -71,32 +80,18 @@ export function BookingModal() {
   const today = startOfDay(new Date());
   const maxDate = addDays(today, 60);
 
-  const handleConfirm = () => {
-    if (bookingDraft.mode === "physical") {
-      setDraftAddress({
-        fullName: addr.fullName,
-        phone: addr.phone,
-        line1: addr.line1,
-        line2: addr.line2 || undefined,
-        city: addr.city,
-        pincode: addr.pincode,
-        landmark: addr.landmark || undefined,
-      });
-    }
-    setSubmitting(true);
-    // Simulate admin assignment (1.2s)
-    setTimeout(() => {
-      const id = confirmBooking();
-      if (id) {
-        setConfirmedBookingId(id);
-        setSubmitting(false);
-        toast("Booking confirmed! Caregiver assigned.", "success");
-      } else {
-        setSubmitting(false);
-        toast("Please complete all required fields.", "error");
-      }
-    }, 1200);
+  const handleConfirm = async () => {
+    try{const sr=await fetch("/patient/api/auth/session");const d=await sr.json();if(!d.authenticated){window.location.href="/patient/login?return="+encodeURIComponent(window.location.pathname);return;}}catch{}
+    if (bookingDraft.mode==='physical') setDraftAddress({fullName:addr.fullName,phone:addr.phone,line1:addr.line1,line2:addr.line2||undefined,city:addr.city,pincode:addr.pincode,landmark:addr.landmark||undefined});
+    setSubmitting(true); try {
+      const ts=(bookingDraft.timeSlot||"").split(" – ")[0].split(" - ")[0].trim();
+      const r=await fetch("/patient/api/bookings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({serviceId:service.id,doctorId:bookingDraft.doctor?.id,consultationMode:bookingDraft.mode==="online"?"online":"in_home",date:bookingDraft.date,startTime:ts,notes:bookingDraft.notes||undefined,bookingType:"consultation"})});
+      const d=await r.json();
+      if(r.ok&&d.booking){setConfirmedBookingId(d.booking.bookingId);toast("Booking confirmed!","success")}
+      else toast(d.error||"Booking failed.","error")
+    }catch{toast("Network issue.","error")}finally{setSubmitting(false)}
   };
+
 
   const canGoToSchedule =
     bookingDraft.mode !== null &&
@@ -135,7 +130,7 @@ export function BookingModal() {
           </div>
           <div className="px-6 py-5">
             <p className="text-sm leading-relaxed text-slate-700">
-              An admin-approved, fully-verified caregiver has been assigned to
+              An admin-approved, fully-verified doctor has been assigned to
               your booking. You can now view their profile — name, date of
               birth, address, emergency contact, masked Aadhaar, police
               verification reference and video verification — before they
@@ -145,11 +140,11 @@ export function BookingModal() {
               <button
                 onClick={() => {
                   closeBooking();
-                  setView("caregiver-profile");
+                  setView("bookings");
                 }}
                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 px-5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md active:scale-95"
               >
-                View Caregiver Profile
+                View My Bookings
               </button>
               <button
                 onClick={() => {
@@ -158,7 +153,7 @@ export function BookingModal() {
                 }}
                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-white px-5 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-95"
               >
-                Go to My Bookings
+                Done
               </button>
             </div>
           </div>
@@ -168,7 +163,7 @@ export function BookingModal() {
   }
 
   // -------- Booking flow --------
-  const stepOrder: Step[] =
+  const stepOrder: any[] =
     service.mode === "both"
       ? ["mode", "schedule", ...(bookingDraft.mode === "physical" ? ["address"] : []), "review"]
       : ["schedule", ...(service.mode === "physical" ? ["address"] : []), "review"];
@@ -236,7 +231,7 @@ export function BookingModal() {
                   value: "physical" as const,
                   icon: MapPin,
                   title: "In-Home Visit",
-                  desc: "Doctor / caregiver visits your home. Address required.",
+                  desc: "Doctor / doctor visits your home. Address required.",
                   price: service.inHomePrice,
                 },
               ].map((opt) => (
@@ -305,20 +300,20 @@ export function BookingModal() {
                   <Clock className="size-4" /> Select time slot
                 </Label>
                 <div className="grid grid-cols-2 gap-2">
-                  {TIME_SLOTS.map((slot) => (
-                    <button
-                      key={slot}
-                      onClick={() => setDraftTime(slot)}
-                      className={cn(
-                        "rounded-lg border p-2 text-xs font-medium transition-all",
-                        bookingDraft.timeSlot === slot
-                          ? "border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-500"
-                          : "border-border text-slate-700 hover:border-blue-300 hover:bg-blue-50/50"
-                      )}
-                    >
-                      {slot}
-                    </button>
-                  ))}
+                  {slotsLoading ? (
+                      <div className="col-span-2 flex items-center justify-center py-4">
+                        <Loader2 className="size-5 animate-spin text-blue-500" />
+                        <span className="ml-2 text-xs text-slate-500">Loading slots...</span>
+                      </div>
+                    ) : slots.length === 0 ? (
+                      <p className="col-span-2 text-center text-xs text-slate-400 py-4">
+                        {bookingDraft.date ? "No slots for this date." : "Select a date first."}
+                      </p>
+                    ) : slots.map((slot) => (
+                      <button key={slot} onClick={() => setDraftTime(slot)} className={cn("rounded-lg border p-2 text-xs font-medium transition-all", bookingDraft.timeSlot === slot ? "border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-500" : "border-border text-slate-700 hover:border-blue-300 hover:bg-blue-50/50")}>
+                        {slot}
+                      </button>
+                    ))}
                 </div>
               </div>
             </div>
@@ -507,7 +502,7 @@ export function BookingModal() {
 
               <div>
                 <Label htmlFor="notes" className="text-xs">
-                  Notes for caregiver / doctor (optional)
+                  Notes for doctor (optional)
                 </Label>
                 <Textarea
                   id="notes"
@@ -518,8 +513,8 @@ export function BookingModal() {
                 />
               </div>
 
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                After confirmation, our admin will assign a verified caregiver.
+              <p className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                After confirmation, our admin will assign a verified doctor.
                 You will see their full profile and documents before they
                 arrive.
               </p>
@@ -566,7 +561,7 @@ export function BookingModal() {
               {submitting ? (
                 <>
                   <Loader2 className="size-4 animate-spin" /> Assigning
-                  caregiver…
+                  doctor…
                 </>
               ) : (
                 <>

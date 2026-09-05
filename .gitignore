@@ -41,3 +41,8 @@ start.sh
 # ide
 .vscode/
 .idea/
+
+# Log files
+*.log
+server.log
+dev.log

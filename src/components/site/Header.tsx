@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarDays, CircleUser, Home, Menu, X } from "lucide-react";
+import Link from "next/link";
+import { CalendarDays, CircleUser, Home, Menu, X, LogIn } from "lucide-react";
 import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import type { AppView } from "@/lib/types";
@@ -32,7 +33,6 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-white/80 backdrop-blur-lg supports-[backdrop-filter]:bg-white/60">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 md:h-16 md:px-6">
-        {/* Logo */}
         <button
           onClick={() => go("home")}
           className="flex items-center gap-2 rounded-lg px-1 py-1 transition-colors hover:bg-blue-50 active:bg-blue-100"
@@ -46,7 +46,6 @@ export function Header() {
           </span>
         </button>
 
-        {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex">
           {NAV_ITEMS.map((item) => (
             <button
@@ -64,7 +63,6 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Right actions */}
         <div className="flex items-center gap-1">
           <button
             onClick={() => go("bookings")}
@@ -87,7 +85,13 @@ export function Header() {
             <span className="hidden sm:inline">Documents</span>
             <CircleUser className="size-5" />
           </button>
-          {/* Mobile menu toggle */}
+          <Link
+            href="/patient/login"
+            className="flex items-center justify-center size-9 rounded-full text-muted-foreground hover:bg-blue-50 hover:text-blue-700 transition-colors"
+            aria-label="Login"
+          >
+            <LogIn className="size-5" />
+          </Link>
           <button
             onClick={() => setMobileOpen((v) => !v)}
             className="ml-1 flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-blue-50 hover:text-blue-700 md:hidden"
@@ -98,7 +102,6 @@ export function Header() {
         </div>
       </div>
 
-      {/* Mobile dropdown menu */}
       {mobileOpen && (
         <div className="border-t border-border/40 bg-white px-4 py-2 md:hidden">
           {NAV_ITEMS.map((item) => (
@@ -116,6 +119,14 @@ export function Header() {
               {item.label}
             </button>
           ))}
+          <Link
+            href="/patient/login"
+            onClick={() => setMobileOpen(false)}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-blue-700 hover:bg-blue-50"
+          >
+            <LogIn className="size-4" />
+            Login
+          </Link>
         </div>
       )}
     </header>

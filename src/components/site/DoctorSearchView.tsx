@@ -108,6 +108,7 @@ export function DoctorSearchView() {
   );
   const [locating, setLocating] = useState(false);
   const [detectedArea, setDetectedArea] = useState<string | null>(null);
+  const [apiDoctors, setApiDoctors] = useState<Doctor[]>([]);
 
   /** Reverse-geocode the user's GPS coordinates using the free OpenStreetMap
    *  Nominatim API. Returns the matched Gurgaon sector if found, else null. */
@@ -150,16 +151,22 @@ export function DoctorSearchView() {
   /** Use the browser's Geolocation API to fetch the user's precise location,
    *  reverse-geocode it to get the actual sector name, and apply it as the
    *  area filter. Falls back to Haversine nearest-sector if geocoding fails. */
-  // Auto-fetch location on first visit
+  // Fetch doctors from API
   useEffect(() => {
-    const done = sessionStorage.getItem("doc-location-done");
-    if (!done) {
-      const timer = setTimeout(() => {
-        handleUseMyLocation();
-        sessionStorage.setItem("doc-location-done", "true");
-      }, 800);
-      return () => clearTimeout(timer);
-    }
+    fetch("/api/doctors")
+      .then((r) => r.json())
+      .then((data) => {
+        const mapped = (data.doctors || []).map((d: any) => ({
+          ...d,
+          qualifications: d.degree || d.qualifications || "",
+          onlineFee: d.feeOnline ?? d.onlineFee ?? 0,
+          offlineFee: d.feeOffline ?? d.offlineFee ?? 0,
+          languages: typeof d.languages === "string" ? JSON.parse(d.languages || "[]") : (d.languages || []),
+          serviceIds: [],
+        }));
+        setApiDoctors(mapped);
+      })
+      .catch(() => {});
   }, []);
 
   const handleUseMyLocation = () => {
@@ -174,7 +181,7 @@ export function DoctorSearchView() {
         // Step 1: Try reverse geocoding to get the actual sector name
         const geocodedSector = await reverseGeocode(latitude, longitude);
         // Step 2: Check if the geocoded sector exists in our doctor network
-        const doctorAreas = Array.from(new Set(DOCTORS.map((d) => d.area)));
+        const doctorAreas = Array.from(new Set(apiDoctors.map((d) => d.area)));
         let nearest: string | null = null;
         let method = "GPS nearest";
         if (geocodedSector && doctorAreas.includes(geocodedSector)) {
@@ -217,19 +224,19 @@ export function DoctorSearchView() {
 
   // Unique specializations for the filter dropdown
   const specializations = useMemo(
-    () => Array.from(new Set(DOCTORS.map((d) => d.specialization))).sort(),
-    []
+    () => Array.from(new Set(apiDoctors.map((d) => d.specialization))).sort(),
+    [apiDoctors]
   );
 
   // Unique areas for the filter dropdown
   const areas = useMemo(
-    () => Array.from(new Set(DOCTORS.map((d) => d.area))).sort(),
-    []
+    () => Array.from(new Set(apiDoctors.map((d) => d.area))).sort(),
+    [apiDoctors]
   );
 
   // Filter + search + sort
   const filtered = useMemo(() => {
-    let list = DOCTORS;
+    let list = apiDoctors;
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -266,7 +273,7 @@ export function DoctorSearchView() {
         break;
     }
     return sorted;
-  }, [query, specFilter, areaFilter, expFilter, sortBy]);
+  }, [query, specFilter, areaFilter, expFilter, sortBy, apiDoctors]);
 
   // When "Book Now" is clicked on a doctor:
   //  - If the doctor provides only 1 service → open booking modal directly
@@ -527,14 +534,22 @@ function DoctorSearchCard({
       {/* Top row: avatar + name */}
       <div className="flex items-start gap-3">
         <div className="shrink-0">
-          <div
-            className={cn(
-              "flex size-14 items-center justify-center rounded-full bg-gradient-to-br text-lg font-bold text-white shadow-sm",
-              doctor.photoColor
-            )}
-          >
-            {initials}
-          </div>
+         {(doctor as any).avatar ? (
+            <img
+              src={(doctor as any).avatar}
+              alt={doctor.name}
+              className="size-14 rounded-full object-cover shadow-sm"
+            />
+          ) : (
+            <div
+              className={cn(
+                "flex size-14 items-center justify-center rounded-full bg-gradient-to-br text-lg font-bold text-white shadow-sm",
+                doctor.photoColor
+              )}
+            >
+              {initials}
+            </div>
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
