@@ -150,24 +150,6 @@ export function Footer() {
           </div>
         </div>
 
-        <p className="mt-4 text-xs text-slate-400">
-          Admin portal and Caregiver / Doctor app — coming soon. This customer
-          app is built PWA-ready for Android &amp; iOS conversion.
-        </p>
-
-        {/* Discreet doctor portal link (demo only — would be a separate
-            authenticated app in production) */}
-        <p className="mt-2 text-xs text-slate-400">
-          <button
-            onClick={() => {
-              if (typeof window !== "undefined") {
-                window.location.hash = "doctor";
-              }
-            }}
-            className="underline transition-colors hover:text-blue-700"
-          >
-            Doctor Portal (demo)
-          </button>
         </p>
       </div>
     </footer>
