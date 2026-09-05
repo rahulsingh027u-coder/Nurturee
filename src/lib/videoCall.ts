@@ -8,7 +8,10 @@ export interface VideoCallEvents {
   onRemoteStream?: (stream: MediaStream) => void;
   onLocalStream?: (stream: MediaStream) => void;
   onStatusChange?: (status: "connecting" | "connected" | "ended" | "failed") => void;
-  onIceConnectionChange?: (state: RTCIceConnectionState) => void;
+  onSlotLocked?: (bookingId: string) => void;
+  onSlotUnlocked?: (bookingId: string) => void;
+  onPeerJoined?: () => void;
+  onPeerLeft?: () => void;
 }
 
 const ICE_SERVERS: RTCIceServer[] = [
@@ -17,7 +20,6 @@ const ICE_SERVERS: RTCIceServer[] = [
 ];
 
 export class VideoCallManager {
-  readonly peerId: string;
   private socket: Socket | null = null;
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
@@ -25,16 +27,14 @@ export class VideoCallManager {
   private events: VideoCallEvents = {};
   private currentBookingId: string | null = null;
   private currentRole: CallRole | null = null;
-  private remotePeerId: string | null = null;
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private tokenPromise: Promise<string> | null = null;
 
   constructor(events: VideoCallEvents = {}) {
-    this.peerId = `peer-${Math.random().toString(36).slice(2, 10)}`;
     this.events = events;
   }
 
-  async start() {
+  async start(bookingId?: string) {
     if (typeof window === "undefined") return;
     const token = await this.getToken();
     const signalUrl = process.env.NEXT_PUBLIC_SIGNAL_URL ?? "https://ws.nurturee.in";
@@ -44,38 +44,65 @@ export class VideoCallManager {
     });
 
     this.socket.on("connect", () => {
-      this.socket!.emit("register", { peerId: this.peerId, role: "customer" });
+      // Join the lobby room for this booking (waiting room)
+      if (bookingId) {
+        this.socket!.emit("join-room", {
+          roomId: `lobby_${bookingId}`,
+          role: "customer",
+          bookingId,
+        });
+      }
     });
 
-    this.socket.on("signal", (data: { from: string; kind: string; payload: unknown }) => {
-      this.handleSignal(data);
-    });
-
+    // Doctor locked our slot — notify UI
     this.socket.on("slot-locked", (data: { bookingId: string; from: string }) => {
+      this.events.onSlotLocked?.(data.bookingId);
       window.dispatchEvent(new CustomEvent("nurturee-signal", {
         detail: { kind: "lock-slot", bookingId: data.bookingId, from: data.from },
       }));
     });
 
     this.socket.on("slot-unlocked", (data: { bookingId: string; from: string }) => {
+      this.events.onSlotUnlocked?.(data.bookingId);
       window.dispatchEvent(new CustomEvent("nurturee-signal", {
         detail: { kind: "unlock-slot", bookingId: data.bookingId, from: data.from },
       }));
     });
 
-    this.socket.on("peer-offline", (data: { peerId: string }) => {
-      if (this.remotePeerId === data.peerId) {
-        this.events.onStatusChange?.("ended");
-        window.dispatchEvent(new CustomEvent("nurturee-signal", {
-          detail: { kind: "call-ended", bookingId: this.currentBookingId },
-        }));
-        this.cleanupCall();
-      }
+    // Doctor admitted us from lobby to consultation room
+    this.socket.on("admitted", (data: { bookingId: string; callRoom: string }) => {
+      this.joinCallRoom(data.callRoom, data.bookingId);
+    });
+
+    // WebRTC signal relay from the other person in the room
+    this.socket.on("signal", (data: { from: string; kind: string; payload: unknown }) => {
+      this.handleSignal(data);
+    });
+
+    // Peer events
+    this.socket.on("peer-joined", () => {
+      this.events.onPeerJoined?.();
+    });
+
+    this.socket.on("peer-left", () => {
+      this.events.onPeerLeft?.();
+      this.events.onStatusChange?.("ended");
+      window.dispatchEvent(new CustomEvent("nurturee-signal", {
+        detail: { kind: "call-ended", bookingId: this.currentBookingId },
+      }));
+      this.cleanupCall();
     });
 
     this.socket.on("connect_error", (err: Error) => {
       console.error("[vcm] socket connect error:", err.message);
     });
+  }
+
+  // Join the actual consultation room (called after "admitted" from lobby)
+  joinCallRoom(roomId: string, bookingId: string) {
+    if (!this.socket) return;
+    this.currentBookingId = bookingId;
+    this.socket.emit("join-room", { roomId, role: "customer", bookingId });
   }
 
   private async getToken(): Promise<string> {
@@ -88,16 +115,12 @@ export class VideoCallManager {
   }
 
   private async handleSignal(data: { from: string; kind: string; payload: unknown }) {
-    const { from, kind, payload } = data;
+    const { kind, payload } = data;
     switch (kind) {
       case "call-offer": {
         this.currentRole = "callee";
-        this.remotePeerId = from;
-        const sdp = payload as RTCSessionDescriptionInit;
-        const bookingId = (sdp as { bookingId?: string })?.bookingId ?? null;
-        this.currentBookingId = bookingId;
         window.dispatchEvent(new CustomEvent("nurturee-signal", {
-          detail: { kind: "incoming-call", bookingId, from, sdp },
+          detail: { kind: "incoming-call", bookingId: this.currentBookingId, from: data.from, sdp: payload },
         }));
         break;
       }
@@ -144,10 +167,10 @@ export class VideoCallManager {
     }
   }
 
-  async startCall(bookingId: string, remotePeerId: string): Promise<void> {
+  // Doctor (caller) starts the call
+  async startCall(bookingId: string): Promise<void> {
     this.currentBookingId = bookingId;
     this.currentRole = "caller";
-    this.remotePeerId = remotePeerId;
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       this.events.onLocalStream?.(this.localStream);
@@ -156,7 +179,8 @@ export class VideoCallManager {
       this.events.onStatusChange?.("connecting");
       const offer = await this.pc.createOffer();
       await this.pc.setLocalDescription(offer);
-      this.socket?.emit("signal", { to: remotePeerId, kind: "call-offer", payload: offer });
+      // Send to everyone in the room (the doctor)
+      this.socket?.emit("signal", { kind: "call-offer", payload: offer });
     } catch (err) {
       console.error("startCall failed:", err);
       this.events.onStatusChange?.("failed");
@@ -165,18 +189,10 @@ export class VideoCallManager {
     }
   }
 
-  lockSlot(bookingId: string, toPeerId: string) {
-    this.socket?.emit("lock-slot", { bookingId, toPeerId });
-  }
-
-  unlockSlot(bookingId: string, toPeerId: string) {
-    this.socket?.emit("unlock-slot", { bookingId, toPeerId });
-  }
-
-  async acceptCall(bookingId: string, remotePeerId: string, offerSdp: RTCSessionDescriptionInit): Promise<void> {
+  // Customer (callee) accepts the call
+  async acceptCall(bookingId: string, offerSdp: RTCSessionDescriptionInit): Promise<void> {
     this.currentBookingId = bookingId;
     this.currentRole = "callee";
-    this.remotePeerId = remotePeerId;
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       this.events.onLocalStream?.(this.localStream);
@@ -185,7 +201,7 @@ export class VideoCallManager {
       await this.pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
       const answer = await this.pc.createAnswer();
       await this.pc.setLocalDescription(answer);
-      this.socket?.emit("signal", { to: remotePeerId, kind: "call-answer", payload: answer });
+      this.socket?.emit("signal", { kind: "call-answer", payload: answer });
       this.events.onStatusChange?.("connecting");
     } catch (err) {
       console.error("acceptCall failed:", err);
@@ -195,15 +211,13 @@ export class VideoCallManager {
     }
   }
 
-  rejectCall(bookingId: string, remotePeerId: string): void {
-    this.socket?.emit("signal", { to: remotePeerId, kind: "call-rejected" });
+  rejectCall(): void {
+    this.socket?.emit("signal", { kind: "call-rejected" });
     this.cleanupCall();
   }
 
   endCall(): void {
-    if (this.currentBookingId && this.remotePeerId) {
-      this.socket?.emit("signal", { to: this.remotePeerId, kind: "call-end" });
-    }
+    this.socket?.emit("signal", { kind: "call-end" });
     this.cleanupCall();
   }
 
@@ -229,26 +243,36 @@ export class VideoCallManager {
       this.events.onStatusChange?.("connected");
     };
     pc.onicecandidate = (e) => {
-      if (e.candidate && this.remotePeerId) {
-        this.socket?.emit("signal", { to: this.remotePeerId, kind: "ice", payload: e.candidate.toJSON() });
+      if (e.candidate) {
+        this.socket?.emit("signal", { kind: "ice", payload: e.candidate.toJSON() });
       }
     };
     pc.oniceconnectionstatechange = () => {
-      this.events.onIceConnectionChange?.(pc.iceConnectionState);
-      if (pc.iceConnectionState === "failed") this.events.onStatusChange?.("failed");
+      if (pc.iceConnectionState === "failed") {
+        this.events.onStatusChange?.("failed");
+      }
     };
     return pc;
   }
 
   private cleanupCall(): void {
-    if (this.localStream) { this.localStream.getTracks().forEach((t) => t.stop()); this.localStream = null; }
-    if (this.pc) { this.pc.close(); this.pc = null; }
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((t) => t.stop());
+      this.localStream = null;
+    }
+    if (this.pc) {
+      this.pc.close();
+      this.pc = null;
+    }
     this.remoteStream = null;
     this.currentBookingId = null;
     this.currentRole = null;
-    this.remotePeerId = null;
     this.pendingCandidates = [];
   }
 
-  stop() { this.endCall(); this.socket?.disconnect(); this.socket = null; }
+  stop() {
+    this.endCall();
+    this.socket?.disconnect();
+    this.socket = null;
+  }
 }
