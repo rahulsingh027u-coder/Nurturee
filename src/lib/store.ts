@@ -102,7 +102,7 @@ interface AppState {
   /** Doctor (caller) actions */
   doctorLockSlot: (bookingId: string, toPeerId?: string) => void;
   doctorUnlockSlot: (bookingId: string, toPeerId?: string) => void;
-  doctorStartCall: (bookingId: string, remotePeerId: string) => Promise<void>;
+  doctorStartCall: (bookingId: string, remotePeerId?: string) => Promise<void>;
   /** Internal — set by signal listener */
   _setSlotState: (bookingId: string, patch: Partial<SlotState>) => void;
   _setCallStatus: (status: VideoCallStatus) => void;
@@ -307,7 +307,7 @@ export const useAppStore = create<AppState>()(
             case "lock-slot": {
               get()._setSlotState(detail.bookingId, { locked: true });
               // Only toast if customer is not the one who locked it (different tab)
-              if (detail.from !== vcm.peerId) {
+              if (true) {
                 get().toast(
                   "Your time slot has been locked by the doctor. Tap Join Video Call when ready.",
                   "success"
@@ -410,20 +410,22 @@ export const useAppStore = create<AppState>()(
       // ===== Doctor actions =====
       doctorLockSlot: (bookingId, toPeerId) => {
         const vcm = get().vcm;
-        if (!vcm || !toPeerId) return;
-        vcm.lockSlot(bookingId, toPeerId);
+        if (!vcm) return;
+        // Room-based: emit lock-slot to the lobby room
+        vcm.lockSlot(bookingId);
         get()._setSlotState(bookingId, { locked: true });
         get().toast("Slot locked. Customer has been notified.", "success");
       },
 
       doctorUnlockSlot: (bookingId, toPeerId) => {
         const vcm = get().vcm;
-        if (!vcm || !toPeerId) return;
-        vcm.unlockSlot(bookingId, toPeerId);
+        if (!vcm) return;
+        vcm.unlockSlot(bookingId);
         get()._setSlotState(bookingId, { locked: false });
       },
 
       doctorStartCall: async (bookingId, remotePeerId) => {
+        // remotePeerId ignored in room-based mode
         const vcm = get().vcm;
         if (!vcm) {
           get().toast("Video call not initialised.", "error");
@@ -431,7 +433,7 @@ export const useAppStore = create<AppState>()(
         }
         set({ activeCallBookingId: bookingId });
         try {
-          await vcm.startCall(bookingId, remotePeerId);
+          await vcm.startCall(bookingId);
         } catch (err) {
           console.error("doctorStartCall failed:", err);
           get().toast(
@@ -451,11 +453,7 @@ export const useAppStore = create<AppState>()(
           callStatus: "connecting",
         });
         try {
-          await vcm.acceptCall(
-            incomingCall.bookingId,
-            incomingCall.fromPeerId,
-            incomingCall.sdp
-          );
+          await vcm.acceptCall(incomingCall.bookingId, incomingCall.sdp);
           // Clear ringing state
           get()._setSlotState(incomingCall.bookingId, {
             ringing: false,
@@ -479,7 +477,7 @@ export const useAppStore = create<AppState>()(
       rejectIncomingCall: () => {
         const { incomingCall, vcm } = get();
         if (!incomingCall || !vcm) return;
-        vcm.rejectCall(incomingCall.bookingId, incomingCall.fromPeerId);
+        vcm.rejectCall();
         get()._setSlotState(incomingCall.bookingId, {
           ringing: false,
           pendingOffer: undefined,

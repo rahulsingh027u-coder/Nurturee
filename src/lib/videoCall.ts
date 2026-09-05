@@ -211,6 +211,15 @@ export class VideoCallManager {
     }
   }
 
+  // Room-based: lock/unlock slot (emits to lobby room)
+  lockSlot(bookingId: string): void {
+    this.socket?.emit("lock-slot", { bookingId });
+  }
+
+  unlockSlot(bookingId: string): void {
+    this.socket?.emit("unlock-slot", { bookingId });
+  }
+
   rejectCall(): void {
     this.socket?.emit("signal", { kind: "call-rejected" });
     this.cleanupCall();

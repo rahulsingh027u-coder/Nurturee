@@ -49,7 +49,7 @@ export function MyBookingsView() {
 
   const copyMyPeerId = () => {
     if (!vcm) return;
-    navigator.clipboard.writeText(vcm.peerId);
+    toast("Room-based calling — no peer ID needed", "success");
     toast("Peer ID copied — share with the doctor to receive calls.", "success");
   };
 
@@ -81,7 +81,7 @@ export function MyBookingsView() {
                   Your Peer ID for video calls
                 </p>
                 <p className="font-mono text-[11px] text-blue-700">
-                  {vcm.peerId}
+                  "Room-based"
                 </p>
               </div>
             </div>

@@ -84,7 +84,7 @@ export function DoctorConsoleView() {
 
   const copyPeerId = () => {
     if (!vcm) return;
-    navigator.clipboard.writeText(vcm.peerId);
+    toast("Room-based calling — no peer ID needed", "success");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -119,7 +119,7 @@ export function DoctorConsoleView() {
               </p>
               <div className="flex items-center gap-1">
                 <code className="font-mono text-xs font-bold">
-                  {vcm?.peerId ?? "—"}
+                  "Room-based"
                 </code>
                 <button
                   onClick={copyPeerId}
