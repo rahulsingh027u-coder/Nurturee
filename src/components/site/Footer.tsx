@@ -150,7 +150,6 @@ export function Footer() {
           </div>
         </div>
 
-        </p>
       </div>
     </footer>
   );
