@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
 
 const SECRET = new TextEncoder().encode(
-  process.env.SIGNAL_JWT_SECRET ?? ""
+  process.env.SIGNAL_JWT_SECRET ?? (() => { throw new Error("SIGNAL_JWT_SECRET env var is required"); })()
 );
 
 // Customer app doesn't have auth yet — issue a short-lived JWT

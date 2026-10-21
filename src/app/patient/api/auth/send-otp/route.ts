@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     if (!result.success) return NextResponse.json({ success: false, message: result.error, retryAfter: result.retryAfter }, { status: 429 });
 
     const response: Record<string, unknown> = { success: true };
-    if (process.env.SHOW_DEV_OTP === 'true') response.devOtp = result.otp;
+    // devOtp response removed for security
     if (result.retryAfter) response.retryAfter = result.retryAfter;
     return NextResponse.json(response);
   } catch (error) {

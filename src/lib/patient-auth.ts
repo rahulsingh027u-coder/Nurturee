@@ -4,11 +4,11 @@ import { cookies } from "next/headers";
 const otpStore = new Map<string, { otp: string; expiresAt: number }>();
 
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-change-in-production"
+  process.env.JWT_SECRET || (() => { throw new Error("JWT_SECRET env var is required"); })()
 );
 
 export async function generateOtp(phone: string): Promise<any> {
-  if (process.env.SHOW_DEV_OTP === "true") return "123456";
+  // Dev OTP backdoor removed for security
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
   return { success: true, otp };
@@ -16,12 +16,12 @@ export async function generateOtp(phone: string): Promise<any> {
 
 export async function sendOtp(phone: string): Promise<any> {
   const otp = await generateOtp(phone);
-  if (process.env.NODE_ENV !== "production") console.log("[otp] " + phone);
+  // OTP logging removed for security
   return { success: true, otp };
 }
 
 export async function verifyOtp(phone: string, otp: string): Promise<{ valid: boolean; name?: string; error?: string; remainingAttempts?: number }> {
-  if (process.env.SHOW_DEV_OTP === "true") return { valid: true };
+  // Dev OTP verification backdoor removed for security
   const stored = otpStore.get(phone);
   if (!stored) return { valid: false, error: "No OTP requested" };
   if (Date.now() > stored.expiresAt) {
