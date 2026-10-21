@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const services = await prisma.service.findMany({
       select: {
-        id: true, name: true, category: true,
+        id: true, name: true, category: true, subCategory: true,
         description: true, duration: true,
         priceOnline: true, priceAtHome: true, price: true,
       },

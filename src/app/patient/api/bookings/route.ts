@@ -8,36 +8,166 @@ export async function POST(req: NextRequest) {
     const s: any = await getPatientSession(req);
     if (!s) return NextResponse.json(
       { error:'Please sign in first.' }, { status:401 });
-    const { serviceId, doctorId, bookingType,
-      consultationMode, date, startTime, notes } = await req.json();
-    if (!serviceId||!doctorId||!date||!startTime)
+
+    const { serviceId, doctorId, consultationMode, date, startTime, notes, address, city, pincode } = await req.json();
+
+    if (!serviceId || !date)
       return NextResponse.json(
-        { error:'Doctor, date, time required.' }, { status:400 });
-    const doc = await prisma.doctor.findFirst(
-      { where:{ id:doctorId, isBlocked:false } });
-    if (!doc) return NextResponse.json(
-      { error:"Doctor unavailable. Pick another?" }, { status:400 });
-    const fee = consultationMode==='online'
-      ? (doc.feeOnline||0) : (doc.feeAtHome||0);
+        { error:'Service and date are required.' }, { status:400 });
+
+    // Look up the service to determine booking type
+    const service = await prisma.service.findUnique({ where: { id: serviceId } });
+    if (!service) return NextResponse.json(
+      { error:'Service not found.' }, { status:404 });
+
+    // Determine if this is a doctor consultation or a care service
+    const isDoctorService =
+      service.category === 'doctor_consultation';
+
+    const isCareService =
+      service.category === 'elder_care' ||
+      service.category === 'child_care' ||
+      service.subCategory === 'nanny';
+
     const n = await prisma.booking.count();
-    const booking = await prisma.booking.create({ data:{
-      bookingId:`NUR-${String(n+1).padStart(4,'0')}`,
-      patientId:s.patientId, doctorId, serviceId,
-      bookingType:bookingType||'consultation',
-      consultationMode:consultationMode||'in_home',
-      status:'pending', date, startTime,
-      patientName:s.name||'', patientPhone:s.phone||'',
-      address:s.address||null, city:s.city||null,
-      pincode:s.pincode||null, notes:notes||null,
-      totalAmount:fee,
-      doctorEarnings:fee*(1-(doc.commissionRate||15)/100),
-      commissionAmount:fee*(doc.commissionRate||15)/100,
-    }});
-    return NextResponse.json({ booking,
-      message:"Booked! Doctor will confirm shortly." });
+    const bookingId = `NUR-${String(n+1).padStart(4,'0')}`;
+
+    if (isDoctorService) {
+      // ─── DOCTOR CONSULTATION FLOW ───
+      // Customer picks a doctor + time slot → booking created as "pending"
+      // Doctor sees it → confirms → video call
+
+      if (!doctorId || !startTime)
+        return NextResponse.json(
+          { error:'Doctor and time slot are required for consultations.' }, { status:400 });
+
+      const doc = await prisma.doctor.findFirst(
+        { where:{ id:doctorId, isBlocked:false } });
+      if (!doc) return NextResponse.json(
+        { error:"Doctor unavailable. Pick another?" }, { status:400 });
+
+      const fee = consultationMode === 'online'
+        ? (doc.feeOnline || 0) : (doc.feeAtHome || 0);
+
+      const booking = await prisma.booking.create({ data:{
+        bookingId,
+        patientId: s.patientId,
+        doctorId,
+        serviceId,
+        bookingType: 'consultation',
+        consultationMode: consultationMode || 'in_home',
+        status: 'pending',  // doctor needs to confirm
+        source: 'portal',
+        date,
+        startTime,
+        patientName: s.name || '',
+        patientPhone: s.phone || '',
+        address: address || s.address || null,
+        city: s.city || null,
+        pincode: s.pincode || null,
+        notes: notes || null,
+        totalAmount: fee,
+        doctorEarnings: fee * (1 - (doc.commissionRate || 15) / 100),
+        commissionAmount: fee * (doc.commissionRate || 15) / 100,
+      }});
+
+      // Notify admin
+      await prisma.notification.create({
+        data: {
+          userId: 'admin',
+          userType: 'admin',
+          title: 'New Doctor Booking',
+          message: `${s.name || 'Patient'} booked ${service.name} with ${doc.name} for ${date} ${startTime}.`,
+          type: 'booking',
+          bookingId: booking.id,
+        }
+      }).catch(() => {});
+
+      return NextResponse.json({ booking,
+        message:"Booked! Doctor will confirm shortly." });
+
+    } else if (isCareService) {
+      // ─── NANNY / ELDER CARE FLOW ───
+      // Customer selects service → fills details → booking created as "pending_admin_approval"
+      // Admin sees it → approves → assigns partner → partner starts task
+
+      const fee = service.price || 0;
+
+      const booking = await prisma.booking.create({ data:{
+        bookingId,
+        patientId: s.patientId,
+        doctorId: null,  // no doctor for care services
+        caregiverId: null,  // admin will assign later
+        serviceId,
+        bookingType: 'service',
+        consultationMode: 'in_home',
+        status: 'pending_admin_approval',  // admin needs to approve + assign partner
+        source: 'portal',
+        date,
+        startTime: startTime || null,
+        patientName: s.name || '',
+        patientPhone: s.phone || '',
+        address: address || s.address || null,
+        city: city || s.city || null,
+        pincode: pincode || s.pincode || null,
+        notes: notes || null,
+        totalAmount: fee,
+      }});
+
+      // Notify admin
+      await prisma.notification.create({
+        data: {
+          userId: 'admin',
+          userType: 'admin',
+          title: 'New Care Service Booking',
+          message: `${s.name || 'Patient'} requested ${service.name} for ${date}. Needs approval + partner assignment.`,
+          type: 'booking',
+          bookingId: booking.id,
+        }
+      }).catch(() => {});
+
+      return NextResponse.json({ booking,
+        message:"Request submitted! Admin will assign a verified partner soon." });
+
+    } else {
+      // ─── CAREGIVER VERIFICATION FLOW ───
+      // Verification services (background check, etc.)
+      const fee = service.price || 0;
+
+      const booking = await prisma.booking.create({ data:{
+        bookingId,
+        patientId: s.patientId,
+        serviceId,
+        bookingType: 'verification',
+        consultationMode: 'online',
+        status: 'pending',
+        source: 'portal',
+        date,
+        startTime: startTime || null,
+        patientName: s.name || '',
+        patientPhone: s.phone || '',
+        notes: notes || null,
+        totalAmount: fee,
+      }});
+
+      await prisma.notification.create({
+        data: {
+          userId: 'admin',
+          userType: 'admin',
+          title: 'New Verification Request',
+          message: `${s.name || 'Patient'} requested ${service.name}.`,
+          type: 'booking',
+          bookingId: booking.id,
+        }
+      }).catch(() => {});
+
+      return NextResponse.json({ booking,
+        message:"Verification request submitted!" });
+    }
   } catch(e) { console.error('[book POST]',e);
     return NextResponse.json({ error:'Booking failed.' },{ status:500 }); }
 }
+
 export async function GET(req: NextRequest) {
   try {
     const s: any = await getPatientSession(req);

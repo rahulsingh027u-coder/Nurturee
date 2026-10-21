@@ -62,9 +62,9 @@ model Caregiver {
   isSuspended         Boolean   @default(false)
   suspensionReason    String?
   isAvailable         Boolean?
-  rating               Float?
+  rating               Int?
   totalShifts         Int       @default(0)
-  totalEarnings       Float     @default(0)
+  totalEarnings       Int     @default(0)
   onboardingCompleted Boolean   @default(false)
   termsAcceptedAt     DateTime?
   createdAt           DateTime  @default(now())
@@ -93,7 +93,7 @@ model CarePartnerService {
   id          String   @id @default(cuid())
   caregiverId String
   service     String
-  hourlyRate  Float?
+  hourlyRate  Int?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   caregiver Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
@@ -140,16 +140,16 @@ model Doctor {
   area              String    @default("")
   avatar            String?
   bio               String?
-  feeOnline         Float     @default(0)
-  feeAtHome         Float     @default(0)
+  feeOnline         Int     @default(0)
+  feeAtHome         Int     @default(0)
   isOnline          Boolean   @default(false)
   isPortalUser      Boolean   @default(false)
   isBlocked         Boolean   @default(false)
   blockReason       String?
-  commissionRate    Float     @default(15)
-  commissionDue     Float     @default(0)
+  commissionRate    Int     @default(15)
+  commissionDue     Int     @default(0)
   totalConsultations Int      @default(0)
-  avgRating         Float     @default(0)
+  avgRating         Int     @default(0)
   verified          Boolean   @default(false)
   isSuspended       Boolean   @default(false)
   suspensionReason  String?
@@ -210,9 +210,9 @@ model Service {
   description  String?
   duration     String
   priceType    String   @default("per_consultation")
-  priceOnline  Float?
-  priceAtHome  Float?
-  price        Float?
+  priceOnline  Int?
+  priceAtHome  Int?
+  price        Int?
   mode         String   @default("both")
   includes     String   @default("[]")
   isActive     Boolean  @default(true)
@@ -224,33 +224,33 @@ model Service {
 
 model Booking {
   id               String   @id @default(cuid())
-  bookingId        String   @unique
-  patientId        String
+  bookingId        String?  @unique
+  patientId        String?
   doctorId         String?
   caregiverId      String?
-  serviceId        String
-  bookingType      String
+  serviceId        String   @default("")
+  bookingType      String   @default("consultation")
   consultationMode String   @default("in_home")
   status           String   @default("pending")
   source           String   @default("portal")
   date             String
-  startTime        String
+  startTime        String?
   endTime          String?
-  patientName      String
-  patientPhone     String
+  patientName      String   @default("")
+  patientPhone     String   @default("")
   address          String?
   city             String?
   pincode          String?
   notes            String?
-  totalAmount      Float    @default(0)
-  commissionAmount Float    @default(0)
-  doctorEarnings   Float    @default(0)
+  totalAmount      Int    @default(0)
+  commissionAmount Int    @default(0)
+  doctorEarnings   Int    @default(0)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-  patient       Patient      @relation(fields: [patientId], references: [id])
+  patient       Patient?     @relation(fields: [patientId], references: [id])
   doctor        Doctor?      @relation(fields: [doctorId], references: [id])
   caregiver     Caregiver?   @relation(fields: [caregiverId], references: [id])
-  service       Service      @relation(fields: [serviceId], references: [id])
+  service       Service?     @relation(fields: [serviceId], references: [id])
   prescription  Prescription?
   review        Review?
   commission    Commission?
@@ -290,10 +290,10 @@ model Commission {
   id               String    @id @default(cuid())
   bookingId        String    @unique
   doctorId         String
-  totalAmount      Float
+  totalAmount      Int
   commissionRate   Float
-  commissionAmount Float
-  doctorEarnings   Float
+  commissionAmount Int
+  doctorEarnings   Int
   paymentStatus    String    @default("pending")
   paidAt           DateTime?
   createdAt        DateTime  @default(now())
@@ -305,7 +305,7 @@ model Commission {
 model Transaction {
   id          String   @id @default(cuid())
   doctorId    String
-  amount      Float
+  amount      Int
   type        String
   description String
   createdAt   DateTime @default(now())
