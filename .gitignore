@@ -46,3 +46,7 @@ start.sh
 *.log
 server.log
 dev.log
+
+# Backup files
+*.bak
+_backups/
