@@ -44,8 +44,11 @@ export function BookingModal() {
   const bookingDraft = useAppStore((s) => s.bookingDraft);
 
   const service = bookingDraft.service;
-  const isDoctorService = service?.category === "doctor";
-  const isCareService = service?.category === "childcare" || service?.category === "eldercare";
+  if (service && !service.mode) {
+    (service as any).mode = (service as any).category === "doctor_consultation" ? "both" : "physical";
+  }
+  const isDoctorService = (service as any)?.category === "doctor_consultation" || (service as any)?.category === "doctor";
+  const isCareService = (service as any)?.category === "child_care" || (service as any)?.category === "elder_care" || (service as any)?.category === "childcare" || (service as any)?.category === "eldercare";
 
   const [step, setStep] = useState<Step>(() =>
     isCareService ? "schedule" : (service?.mode === "both" ? "mode" : "schedule")

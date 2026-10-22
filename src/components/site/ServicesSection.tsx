@@ -1,7 +1,8 @@
 "use client";
 
 import { useAppStore } from "@/lib/store";
-import { SERVICES } from "@/lib/data";
+import { useState, useEffect } from "react";
+// Mock SERVICES replaced with real API data
 import { Icon, ACCENT_CLASSES } from "./Icons";
 import { ArrowRight } from "lucide-react";
 import type { ServiceCategory } from "@/lib/types";
@@ -39,10 +40,18 @@ const CATEGORY_META: Record<
 const CATEGORIES: ServiceCategory[] = ["childcare", "eldercare", "doctor", "verification"];
 
 export function ServicesSection() {
+  const [services, setServices] = useState<any[]>([]);
+  useEffect(() => {
+    fetch("/patient/api/services")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.services) setServices(d.services); })
+      .catch(() => {});
+  }, []);
+
   const setView = useAppStore((s) => s.setView);
 
   const countFor = (cat: ServiceCategory) =>
-    SERVICES.filter((s) => s.category === cat).length;
+    services.filter((s) => s.category === cat).length;
 
   return (
     <section id="services" className="px-4 py-14 md:px-8 md:py-20">
