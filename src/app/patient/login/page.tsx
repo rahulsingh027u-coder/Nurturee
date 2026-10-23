@@ -134,7 +134,7 @@ export default function PatientLoginPage() {
     try {
       const body: Record<string, string> = { otp, name: '', password: '' };
       if (mode === 'phone') body.phone = id.trim(); else body.email = id.trim();
-      const d = await api('/patient/api/auth/verify-otp', body);
+      const d = await api('/patient/api/auth/set-password', { password: pw });
       if (d.isNewUser) return await go('name');
       if (d.hasPassword) return await go('login-password');
       await go('set-password');
@@ -151,9 +151,9 @@ export default function PatientLoginPage() {
     if (pw !== pw2) return setErr("Those don't match — could you re-type?");
     setBusy(true);
     try {
-      const body: Record<string, string> = { otp: '', name: name.trim(), password: pw };
+      // Set password via dedicated route
       if (mode === 'phone') body.phone = id.trim(); else body.email = id.trim();
-      await api('/patient/api/auth/verify-otp', body);
+      await api('/patient/api/auth/set-password', { password: pw });
       await go('done'); setTimeout(() => router.push(returnUrl), 1400);
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   };
