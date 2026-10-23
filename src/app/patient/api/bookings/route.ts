@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { safeValidate, idSchema, dateSchema, bookingTypeSchema, consultationModeSchema } from '@/lib/validate';
 import { PrismaClient } from '@prisma/client';
 import { getPatientSession } from '@/lib/patient-auth';
 const prisma = new PrismaClient();
@@ -9,7 +10,13 @@ export async function POST(req: NextRequest) {
     if (!s) return NextResponse.json(
       { error:'Please sign in first.' }, { status:401 });
 
-    const { serviceId, doctorId, consultationMode, date, startTime, notes, address, city, pincode } = await req.json();
+    const body = await req.json();
+    const { serviceId, doctorId, consultationMode, date, startTime, notes, address, city, pincode } = body;
+    // Validate required fields
+    if (!serviceId || typeof serviceId !== 'string') return NextResponse.json({ error: 'Valid serviceId required' }, { status: 400 });
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Valid date required (YYYY-MM-DD)' }, { status: 400 });
+    if (notes && notes.length > 1000) return NextResponse.json({ error: 'Notes too long' }, { status: 400 });
+    if (address && address.length > 500) return NextResponse.json({ error: 'Address too long' }, { status: 400 });
 
     if (!serviceId || !date)
       return NextResponse.json(
