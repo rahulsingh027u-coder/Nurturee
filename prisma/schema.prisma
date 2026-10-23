@@ -39,7 +39,7 @@ model SubUser {
 model Caregiver {
   id                  String    @id @default(cuid())
   caregiverId         String    @unique
-  phone               String
+  phone               String @unique
   name                String?
   email               String?
   profilePhoto        String?
@@ -255,7 +255,13 @@ model Booking {
   review        Review?
   commission    Commission?
   notifications Notification[]
-}
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([caregiverId])
+  @@index([serviceId])
+  @@index([status])
+  @@index([date])}
 
 model Prescription {
   id           String   @id @default(cuid())
@@ -291,7 +297,7 @@ model Commission {
   bookingId        String    @unique
   doctorId         String
   totalAmount      Int
-  commissionRate   Float
+  commissionRate  Decimal @db.Decimal(10,2)
   commissionAmount Int
   doctorEarnings   Int
   paymentStatus    String    @default("pending")
@@ -335,7 +341,8 @@ model Notification {
   bookingId  String?
   createdAt  DateTime @default(now())
   booking Booking? @relation(fields: [bookingId], references: [id])
-}
+
+  @@index([userId, userType])}
 
 model Verification {
   id               String    @id @default(cuid())
