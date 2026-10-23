@@ -133,7 +133,6 @@ export default function PatientLoginPage() {
     setBusy(true);
     try {
       const body: Record<string, string> = { otp, name: '', password: '' };
-      if (mode === 'phone') body.phone = id.trim(); else body.email = id.trim();
       const d = await api('/patient/api/auth/set-password', { password: pw });
       if (d.isNewUser) return await go('name');
       if (d.hasPassword) return await go('login-password');
@@ -152,7 +151,6 @@ export default function PatientLoginPage() {
     setBusy(true);
     try {
       // Set password via dedicated route
-      if (mode === 'phone') body.phone = id.trim(); else body.email = id.trim();
       await api('/patient/api/auth/set-password', { password: pw });
       await go('done'); setTimeout(() => router.push(returnUrl), 1400);
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
@@ -163,7 +161,6 @@ export default function PatientLoginPage() {
     setBusy(true);
     try {
       const body: Record<string, string> = { password: loginPw };
-      if (mode === 'phone') body.phone = id.trim(); else body.email = id.trim();
       await api('/patient/api/auth/login-password', body);
       await go('done'); setTimeout(() => router.push(returnUrl), 1400);
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
